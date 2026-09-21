@@ -7,8 +7,9 @@ from train import _train
 from eval import _eval
 
 def main(args):
-    cudnn.benchmark = True
+    cudnn.benchmark = True   # 开启 cuDNN 自动调优,提升卷积前向/反向速度
 
+    # 创建各类结果目录(若不存在)
     if not os.path.exists('results/'):
         os.makedirs(args.model_save_dir)
     if not os.path.exists('results/' + args.model_name + '/'):
@@ -18,17 +19,17 @@ def main(args):
     if not os.path.exists(args.result_dir):
         os.makedirs(args.result_dir)
 
-    model = build_net()
-    # print(model)
+    model = build_net()      # 构建 ConvIR 网络(去运动模糊版:无参数)
+    # print(model)            # 默认不打印网络结构
 
     if torch.cuda.is_available():
-        model.cuda()
+        model.cuda()         # 迁移到 GPU
         
     if args.mode == 'train':
-        _train(model, args)
+        _train(model, args)  # 训练
 
     elif args.mode == 'test':
-        _eval(model, args)
+        _eval(model, args)   # 评估/测试
 
 
 if __name__ == '__main__':
@@ -60,6 +61,7 @@ if __name__ == '__main__':
     args.result_dir = os.path.join('results/', args.model_name, 'GOPRO')
     if not os.path.exists(args.model_save_dir):
         os.makedirs(args.model_save_dir)
+    # 把关键源码复制到模型保存目录,便于训练复现
     command = 'cp ' + 'models/layers.py ' + args.model_save_dir
     os.system(command)
     command = 'cp ' + 'models/ConvIR.py ' + args.model_save_dir

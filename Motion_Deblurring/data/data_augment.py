@@ -4,6 +4,8 @@ import torchvision.transforms.functional as F
 
 
 class PairRandomCrop(transforms.RandomCrop):
+    """成对随机裁剪:对输入和标签在相同位置随机裁剪,
+    保证两者裁剪区域一致(空间对齐)。"""
 
     def __call__(self, image, label):
 
@@ -20,12 +22,13 @@ class PairRandomCrop(transforms.RandomCrop):
             image = F.pad(image, (0, self.size[0] - image.size[1]), self.fill, self.padding_mode)
             label = F.pad(label, (0, self.size[0] - image.size[1]), self.fill, self.padding_mode)
 
-        i, j, h, w = self.get_params(image, self.size)
+        i, j, h, w = self.get_params(image, self.size)   # 随机生成裁剪位置
 
-        return F.crop(image, i, j, h, w), F.crop(label, i, j, h, w)
+        return F.crop(image, i, j, h, w), F.crop(label, i, j, h, w)   # 输入与标签按同一位置裁剪
 
 
 class PairCompose(transforms.Compose):
+    """成对组合变换:把多个对输入/标签同步执行的变换串联起来。"""
     def __call__(self, image, label):
         for t in self.transforms:
             image, label = t(image, label)
@@ -33,6 +36,7 @@ class PairCompose(transforms.Compose):
 
 
 class PairRandomHorizontalFilp(transforms.RandomHorizontalFlip):
+    """成对随机水平翻转:以概率 p 同时翻转输入与标签。"""
     def __call__(self, img, label):
         """
         Args:
@@ -42,7 +46,7 @@ class PairRandomHorizontalFilp(transforms.RandomHorizontalFlip):
             PIL Image: Randomly flipped image.
         """
         if random.random() < self.p:
-            return F.hflip(img), F.hflip(label)
+            return F.hflip(img), F.hflip(label)   # 成对翻转,保持一致
         return img, label
 
 
@@ -61,6 +65,7 @@ class PairRandomHorizontalFilp(transforms.RandomHorizontalFlip):
 
 
 class PairToTensor(transforms.ToTensor):
+    """成对转张量:把输入与标签分别转成 0~1 的 float 张量。"""
     def __call__(self, pic, label):
         """
         Args:

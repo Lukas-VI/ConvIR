@@ -7,8 +7,9 @@ from train import _train
 from eval import _eval
 
 def main(args):
-    cudnn.benchmark = True
+    cudnn.benchmark = True   # 开启 cuDNN 自动调优,提升卷积前向/反向速度
 
+    # 创建各类结果目录(若不存在)
     if not os.path.exists('results/'):
         os.makedirs(args.model_save_dir)
     if not os.path.exists('results/' + args.model_name + '/'):
@@ -16,16 +17,16 @@ def main(args):
     if not os.path.exists(args.result_dir):
         os.makedirs(args.result_dir)
 
-    model = build_net()
+    model = build_net()   # 构建 ConvIR 网络
     print(model)
 
     if torch.cuda.is_available():
-        model.cuda()
+        model.cuda()      # 迁移到 GPU
     if args.mode == 'train':
-        _train(model, args)
+        _train(model, args)   # 训练
 
     elif args.mode == 'test':
-        _eval(model, args)
+        _eval(model, args)    # 评估/测试
 
 
 if __name__ == '__main__':
@@ -53,10 +54,12 @@ if __name__ == '__main__':
     parser.add_argument('--save_image', type=bool, default=False, choices=[True, False])
 
     args = parser.parse_args()
+    # 按住不同用途组织保存目录
     args.model_save_dir = os.path.join('results/', 'ConvIR', 'train_results/')
     args.result_dir = os.path.join('results/', args.model_name, 'test')
     if not os.path.exists(args.model_save_dir):
         os.makedirs(args.model_save_dir)
+    # 把核心源码文件复制到结果目录,方便训练后归档复现(依赖系统 cp 命令,Windows 下可能需调整)
     command = 'cp ' + 'models/layers.py ' + args.model_save_dir
     os.system(command)
     command = 'cp ' + 'models/ConvIR.py ' + args.model_save_dir

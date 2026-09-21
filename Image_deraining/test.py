@@ -13,6 +13,7 @@ from tqdm import tqdm
 import torch.nn.functional as f
 
 class DeblurDataset(Dataset):
+    """成对图像数据集(input/target 目录对应),此处是独立副本,逻辑与 data_load.py 里的相同。"""
     def __init__(self, image_dir, transform=None, is_test=False):
         self.image_dir = image_dir
         self.image_list = os.listdir(os.path.join(image_dir, 'input/'))
@@ -40,12 +41,14 @@ class DeblurDataset(Dataset):
 
     @staticmethod
     def _check_image(lst):
+        """校验文件名后缀为图片格式。"""
         for x in lst:
             splits = x.split('.')
             if splits[-1] not in ['png', 'jpg', 'jpeg']:
                 raise ValueError
 
 def test_dataloader(path, batch_size=1, num_workers=0):
+    """测试数据加载器(不做变换,返回文件名)。"""
     dataloader = DataLoader(
         DeblurDataset(path, is_test=True),
         batch_size=batch_size,
@@ -69,6 +72,7 @@ args = parser.parse_args()
 
 args.result_dir = os.path.join('results/', args.model_name, 'deraining/')
 
+# 创建结果目录
 if not os.path.exists('results/'):
     os.makedirs(args.model_save_dir)
 if not os.path.exists('results/' + args.model_name + '/'):
@@ -81,6 +85,7 @@ model = build_net()
 if torch.cuda.is_available():
     model.cuda()
 
+# 加载测试权重
 state_dict = torch.load(args.test_model)
 model.load_state_dict(state_dict['model'])
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -88,6 +93,7 @@ torch.cuda.empty_cache()
 adder = Adder()
 model.eval()
 
+# 依次在多个去雨测试集上评估
 datasets = ['Rain100L', 'Rain100H', 'Test100', 'Test1200', 'Test2800']
 
 for dataset in datasets:
@@ -99,35 +105,35 @@ for dataset in datasets:
     with torch.no_grad():
         psnr_adder = Adder()
 
-
         # Main Evaluation
         for iter_idx, data in enumerate(tqdm(dataloader), 0):
             input_img, label_img, name = data
 
             input_img = input_img.to(device)
 
+            # 尺寸对齐到 32 的倍数,避免下采样/上采样尺寸问题
             h, w = input_img.shape[2], input_img.shape[3]
             H, W = ((h+factor)//factor)*factor, ((w+factor)//factor*factor)
             padh = H-h if h%factor!=0 else 0
             padw = W-w if w%factor!=0 else 0
             input_img = f.pad(input_img, (0, padw, 0, padh), 'reflect')
 
-
             tm = time.time()
 
-            pred = model(input_img)[2]
+            pred = model(input_img)[2]   # 取原图尺度输出
 
             elapsed = time.time() - tm
-            adder(elapsed)
+            adder(elapsed)   # 统计推理耗时
 
             pred_clip = torch.clamp(pred, 0, 1)
 
             pred_numpy = pred_clip.squeeze(0).cpu().numpy()
             label_numpy = label_img.squeeze(0).cpu().numpy()
 
+            # 可选:保存去雨结果图像
             if args.save_image:
                 save_name = os.path.join(args.result_dir, dataset, name[0])
-                pred_clip += 0.5 / 255
+                pred_clip += 0.5 / 255   # +0.5 四舍五入,避免量化误差累积(转 8bit 时)
                 pred = F.to_pil_image(pred_clip.squeeze(0).cpu(), 'RGB')
                 pred.save(save_name)
 

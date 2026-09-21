@@ -8,39 +8,42 @@ import torch.nn.functional as f
 
 
 def _valid(model, args, ep):
+    """验证函数(去雪版):反射填充保证尺寸可被 32 整除,
+    仅用原图尺度预测(输出索引2)计算 PSNR 并取平均。"""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    snow_data = valid_dataloader(args.data_dir, args.data, batch_size=1, num_workers=0)
+    snow_data = valid_dataloader(args.data_dir, args.data, batch_size=1, num_workers=0)  # 传入数据集类型
     model.eval()
     psnr_adder = Adder()
 
-    with torch.no_grad():
+    with torch.no_grad():   # 验证阶段无需梯度
         print('Start Desnowing Evaluation')
-        factor = 32 
+        factor = 32         # 网络下采样总步长(多次 s2),输入需是它的倍数 
         for idx, data in enumerate(snow_data):
             input_img, label_img = data
             input_img = input_img.to(device)
 
             h, w = input_img.shape[2], input_img.shape[3]
+            # 把 H/W 向上取整到 factor(32) 的倍数
             H, W = ((h+factor)//factor)*factor, ((w+factor)//factor*factor)
-            padh = H-h if h%factor!=0 else 0
-            padw = W-w if w%factor!=0 else 0
-            input_img = f.pad(input_img, (0, padw, 0, padh), 'reflect')
+            padh = H-h if h%factor!=0 else 0   # 需补的高空余
+            padw = W-w if w%factor!=0 else 0   # 需补的宽空余
+            input_img = f.pad(input_img, (0, padw, 0, padh), 'reflect')  # 反射填充到整数倍
 
             if not os.path.exists(os.path.join(args.result_dir, '%d' % (ep))):
-                os.mkdir(os.path.join(args.result_dir, '%d' % (ep)))
+                os.mkdir(os.path.join(args.result_dir, '%d' % (ep)))     # 按 epoch 建结果目录
 
-            pred = model(input_img)[2]
-            pred = pred[:,:,:h,:w]
+            pred = model(input_img)[2]          # 取原图尺度输出
+            pred = pred[:,:,:h,:w]              # 裁回原始尺寸(去掉填充)
 
-            pred_clip = torch.clamp(pred, 0, 1)
+            pred_clip = torch.clamp(pred, 0, 1)  # 约束到 [0,1]
             p_numpy = pred_clip.squeeze(0).cpu().numpy()
             label_numpy = label_img.squeeze(0).cpu().numpy()
 
-            psnr = peak_signal_noise_ratio(p_numpy, label_numpy, data_range=1)
+            psnr = peak_signal_noise_ratio(p_numpy, label_numpy, data_range=1)  # skimage 的 PSNR
 
             psnr_adder(psnr)
-            print('\r%03d'%idx, end=' ')
+            print('\r%03d'%idx, end=' ')       # 进度提示
 
     print('\n')
-    model.train()
-    return psnr_adder.average()
+    model.train()                              # 恢复训练模式
+    return psnr_adder.average()                # 返回平均 PSNR
